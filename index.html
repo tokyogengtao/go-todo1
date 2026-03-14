@@ -3,217 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>四象限效率看板 V1.1</title>
+    <title>四象限效率看板 V1.2-Cloud</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --red: #FF3B30; --blue: #007AFF; --yellow: #FFCC00; --gray: #8E8E93;
             --bg: #F2F2F7; --card-bg: rgba(255, 255, 255, 0.85);
         }
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; 
-            margin: 0; background: var(--bg); height: 100vh; 
-            display: flex; flex-direction: column; overflow: hidden;
+            font-family: -apple-system, sans-serif; margin: 0; background: var(--bg); 
+            height: 100vh; display: flex; flex-direction: column; overflow: hidden;
         }
-        /* iOS 风格毛玻璃页眉 */
+        /* 页眉 */
         .header { 
             padding: 50px 20px 15px; background: rgba(255,255,255,0.7); 
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             position: sticky; top: 0; z-index: 50; text-align: center;
             font-size: 17px; font-weight: 600; border-bottom: 0.5px solid #d1d1d6;
         }
-        /* 自动版本标签 */
-        #version-tag {
-            position: fixed; bottom: 85px; right: 25px; font-size: 10px;
-            color: #C7C7CC; font-family: "SF Mono", monospace; z-index: 10;
-        }
-        /* 四象限网格 */
-        .grid-container { 
-            display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; 
-            gap: 12px; padding: 12px; flex: 1; margin-bottom: 90px;
-        }
-        .quadrant { 
-            background: var(--card-bg); border-radius: 20px; display: flex; 
-            flex-direction: column; padding: 12px; overflow-y: auto; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid rgba(255,255,255,0.5);
-        }
+        #status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; background: #FF3B30; transition: 0.3s; }
+        #version-tag { position: fixed; bottom: 85px; right: 25px; font-size: 10px; color: #C7C7CC; font-family: monospace; }
+        
+        /* 网格 */
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; padding: 12px; flex: 1; margin-bottom: 90px; }
+        .quadrant { background: var(--card-bg); border-radius: 20px; display: flex; flex-direction: column; padding: 12px; overflow-y: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid rgba(255,255,255,0.5); }
         .q-title { font-size: 12px; font-weight: 700; margin-bottom: 10px; display: flex; justify-content: space-between; }
         .q1 .q-title { color: var(--red); } .q2 .q-title { color: var(--blue); }
         .q3 .q-title { color: var(--yellow); } .q4 .q-title { color: var(--gray); }
         
-        .add-icon { background: #EEE; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-
-        /* 任务卡片 */
-        .task-item { 
-            background: white; border-radius: 12px; padding: 10px; margin-bottom: 8px; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02); animation: slideIn 0.2s ease;
-        }
-        @keyframes slideIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .task-content { font-size: 14px; font-weight: 500; display: block; margin-bottom: 2px; }
+        /* 任务 */
+        .task-item { background: white; border-radius: 12px; padding: 10px; margin-bottom: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .task-content { font-size: 14px; font-weight: 500; display: block; }
         .task-meta { font-size: 10px; color: #AEAEB2; }
 
-        /* 底部浮动工具栏 */
-        .footer-tools { 
-            position: fixed; bottom: 25px; left: 20px; right: 20px;
-            background: rgba(28,28,30,0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-            border-radius: 25px; padding: 12px; display: flex; justify-content: space-around;
-        }
-        .tool-btn { color: white; background: none; border: none; font-size: 12px; font-weight: 500; }
+        /* 工具栏 */
+        .footer-tools { position: fixed; bottom: 25px; left: 20px; right: 20px; background: rgba(28,28,30,0.85); backdrop-filter: blur(15px); border-radius: 25px; padding: 12px; display: flex; justify-content: space-around; }
+        .tool-btn { color: white; background: none; border: none; font-size: 12px; }
 
-        /* iOS 抽屉弹窗 */
-        #modal { 
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.4); justify-content: center; align-items: flex-end; z-index: 100; 
-        }
-        .modal-content { 
-            background: #F2F2F7; padding: 25px; border-radius: 25px 25px 0 0; width: 100%; box-sizing: border-box;
-            animation: sheetUp 0.3s cubic-bezier(0.25, 0.5, 0.5, 1);
-        }
-        @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        input { width: 100%; margin-bottom: 12px; padding: 15px; border: none; border-radius: 12px; font-size: 16px; outline: none; -webkit-appearance: none; }
+        /* 弹窗 */
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: flex-end; z-index: 100; }
+        .modal-content { background: #F2F2F7; padding: 25px; border-radius: 25px 25px 0 0; width: 100%; box-sizing: border-box; }
+        input { width: 100%; margin-bottom: 12px; padding: 15px; border: none; border-radius: 12px; font-size: 16px; outline: none; }
         .save-btn { width: 100%; padding: 16px; background: var(--blue); color: white; border: none; border-radius: 14px; font-weight: 600; font-size: 17px; }
     </style>
 </head>
 <body>
 
-<div class="header">四象限效率看板</div>
+<div class="header">
+    <span id="status-dot"></span>云端同步看板
+</div>
 
-<div id="version-tag">Ver. 1.1.0</div>
+<div id="version-tag">Ver. 1.2.0 (Cloud)</div>
 
 <div class="grid-container">
-    <div class="quadrant q1" onclick="openModal(1)"><div class="q-title">重要·紧急 <span class="add-icon">＋</span></div><div id="list1"></div></div>
-    <div class="quadrant q2" onclick="openModal(2)"><div class="q-title">重要·不紧急 <span class="add-icon">＋</span></div><div id="list2"></div></div>
-    <div class="quadrant q3" onclick="openModal(3)"><div class="q-title">紧急·不重要 <span class="add-icon">＋</span></div><div id="list3"></div></div>
-    <div class="quadrant q4" onclick="openModal(4)"><div class="q-title">不重要·闲暇 <span class="add-icon">＋</span></div><div id="list4"></div></div>
+    <div class="quadrant q1" onclick="openModal(1)"><div class="q-title">重要·紧急 <span>＋</span></div><div id="list1"></div></div>
+    <div class="quadrant q2" onclick="openModal(2)"><div class="q-title">重要·不紧急 <span>＋</span></div><div id="list2"></div></div>
+    <div class="quadrant q3" onclick="openModal(3)"><div class="q-title">紧急·不重要 <span>＋</span></div><div id="list3"></div></div>
+    <div class="quadrant q4" onclick="openModal(4)"><div class="q-title">不重要·闲暇 <span>＋</span></div><div id="list4"></div></div>
 </div>
 
 <div class="footer-tools">
-    <button class="tool-btn" onclick="exportData()">📤 导出备份</button>
-    <button class="tool-btn" onclick="importData()">📥 导入数据</button>
-    <button class="tool-btn" onclick="clearAll()" style="color: #FF453A;">🗑️ 清空重置</button>
+    <button class="tool-btn" onclick="fetchTasks()">🔄 同步刷新</button>
+    <button class="tool-btn" onclick="clearAll()" style="color: #FF453A;">🗑️ 清空云端</button>
 </div>
 
 <div id="modal">
     <div class="modal-content" onclick="event.stopPropagation()">
         <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 20px;">
-            <span style="font-weight:700; font-size: 18px;">新建任务</span>
+            <span style="font-weight:700">添加任务</span>
             <span onclick="closeModal()" style="color:var(--blue); cursor:pointer;">取消</span>
         </div>
-        <input type="text" id="taskContent" placeholder="在此输入任务内容..." autofocus>
+        <input type="text" id="taskContent" placeholder="要做什么？" autofocus>
         <input type="date" id="taskDate">
         <input type="time" id="taskTime">
-        <button class="save-btn" onclick="saveTask()">添加任务</button>
+        <button class="save-btn" id="saveBtn" onclick="saveTask()">保存到云端</button>
     </div>
 </div>
 
 <script>
-    let currentQuadrant = 1;
-    let allTasks = JSON.parse(localStorage.getItem('myQuadTasks')) || [];
-    
-    // 版本控制逻辑
-    const baseVersion = "1.1";
-    let patchVersion = parseInt(localStorage.getItem('appPatchVersion')) || 0;
+    // 配置 Supabase (已填入你的 URL 和 Key)
+    const SUPABASE_URL = 'https://vretyaqosmpgdoenlwfl.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_yJ9Z9NR3x9QreGks1dUfGg_Mq44rWXm'; 
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    window.onload = () => {
+    let allTasks = [];
+    let currentQuadrant = 1;
+
+    window.onload = async () => {
         document.getElementById('taskDate').value = new Date().toISOString().split('T')[0];
-        updateVersionUI();
-        renderTasks();
+        await fetchTasks();
     };
 
-    function updateVersionUI() {
-        document.getElementById('version-tag').innerText = `Ver. ${baseVersion}.${patchVersion}`;
-    }
-
-    function bumpVersion() {
-        patchVersion++;
-        localStorage.setItem('appPatchVersion', patchVersion);
-        updateVersionUI();
-    }
-
-    function openModal(q) {
-        currentQuadrant = q;
-        document.getElementById('modal').style.display = 'flex';
-        setTimeout(() => document.getElementById('taskContent').focus(), 100);
-    }
-
-    function closeModal() {
-        document.getElementById('modal').style.display = 'none';
-        document.getElementById('taskContent').value = '';
-    }
-
-    window.onclick = (e) => { if (e.target == document.getElementById('modal')) closeModal(); };
-
-    function saveTask() {
-        const content = document.getElementById('taskContent').value;
-        if (!content) return;
+    // 检查云端连接并刷新数据
+    async function fetchTasks() {
+        const dot = document.getElementById('status-dot');
+        const { data, error } = await supabaseClient
+            .from('tasks')
+            .select('*')
+            .order('created_at', { ascending: false });
         
-        allTasks.push({
-            id: Date.now(),
-            quadrant: currentQuadrant,
-            content: content,
-            date: document.getElementById('taskDate').value,
-            time: document.getElementById('taskTime').value
-        });
-        
-        bumpVersion(); // 自动升级小版本
-        saveAndRender();
-        closeModal();
-    }
-
-    function deleteTask(id, e) {
-        e.stopPropagation();
-        if(confirm("确定标记为完成并移除吗？")) {
-            allTasks = allTasks.filter(t => t.id !== id);
-            bumpVersion(); // 更新数据也升级版本
-            saveAndRender();
+        if (error) {
+            console.error("同步失败:", error);
+            dot.style.background = '#FF3B30'; // 失败变红
+        } else {
+            dot.style.background = '#4CD964'; // 成功变绿
+            allTasks = data;
+            renderTasks();
         }
     }
 
-    function saveAndRender() {
-        localStorage.setItem('myQuadTasks', JSON.stringify(allTasks));
-        renderTasks();
+    // 保存任务到云端
+    async function saveTask() {
+        const content = document.getElementById('taskContent').value;
+        const btn = document.getElementById('saveBtn');
+        if (!content) return;
+
+        btn.innerText = "正在同步...";
+        btn.disabled = true;
+
+        const { error } = await supabaseClient.from('tasks').insert([{
+            quadrant: currentQuadrant,
+            content: content,
+            task_date: document.getElementById('taskDate').value,
+            task_time: document.getElementById('taskTime').value
+        }]);
+
+        if (error) {
+            alert("云端保存失败，请检查数据库权限 (RLS): " + error.message);
+        } else {
+            await fetchTasks();
+            closeModal();
+        }
+        btn.innerText = "保存到云端";
+        btn.disabled = false;
+    }
+
+    // 从云端删除任务
+    async function deleteTask(id, e) {
+        e.stopPropagation();
+        if(confirm("确定完成该任务并删除吗？")) {
+            const { error } = await supabaseClient.from('tasks').delete().eq('id', id);
+            if (!error) fetchTasks();
+            else alert("删除失败");
+        }
     }
 
     function renderTasks() {
         for (let i = 1; i <= 4; i++) document.getElementById('list' + i).innerHTML = '';
         allTasks.forEach(t => {
-            const timeStr = t.time ? ` ⏰ ${t.time}` : '';
+            const timeInfo = t.task_time ? ` ⏰ ${t.task_time}` : '';
             document.getElementById('list' + t.quadrant).innerHTML += `
-                <div class="task-item" onclick="deleteTask(${t.id}, event)">
+                <div class="task-item" onclick="deleteTask('${t.id}', event)">
                     <span class="task-content">${t.content}</span>
-                    <span class="task-meta">${t.date}${timeStr}</span>
+                    <span class="task-meta">${t.task_date}${timeInfo}</span>
                 </div>`;
         });
     }
 
-    function exportData() {
-        const blob = new Blob([JSON.stringify(allTasks)], {type: "application/json"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = `tasks_v${baseVersion}.${patchVersion}.json`;
-        a.click();
-    }
-
-    function importData() {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.onchange = e => {
-            const reader = new FileReader();
-            reader.onload = ev => {
-                allTasks = JSON.parse(ev.target.result);
-                bumpVersion();
-                saveAndRender();
-            };
-            reader.readAsText(e.target.files[0]);
-        };
-        input.click();
-    }
-
-    function clearAll() {
-        if(confirm("警告：这将清空所有任务并重置版本号！")) {
-            localStorage.clear();
-            location.reload();
-        }
-    }
+    function openModal(q) { currentQuadrant = q; document.getElementById('modal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('modal').style.display = 'none'; document.getElementById('taskContent').value = ''; }
+    async function clearAll() { if(confirm("确定清空云端吗？")) { await supabaseClient.from('tasks').delete().neq('quadrant', 0); fetchTasks(); } }
 </script>
 </body>
 </html>
