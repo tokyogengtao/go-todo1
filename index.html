@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>四象限效率看板 V1.2-Cloud</title>
+    <title>四象限效率看板 V1.2-Public</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
@@ -14,9 +14,8 @@
             font-family: -apple-system, sans-serif; margin: 0; background: var(--bg); 
             height: 100vh; display: flex; flex-direction: column; overflow: hidden;
         }
-        /* 页眉 */
         .header { 
-            padding: 50px 20px 15px; background: rgba(255,255,255,0.7); 
+            padding: calc(40px + env(safe-area-inset-top)) 20px 15px; background: rgba(255,255,255,0.7); 
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             position: sticky; top: 0; z-index: 50; text-align: center;
             font-size: 17px; font-weight: 600; border-bottom: 0.5px solid #d1d1d6;
@@ -24,36 +23,38 @@
         #status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; background: #FF3B30; transition: 0.3s; }
         #version-tag { position: fixed; bottom: 85px; right: 25px; font-size: 10px; color: #C7C7CC; font-family: monospace; }
         
-        /* 网格 */
+        /* 网格容器 */
         .grid-container { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; padding: 12px; flex: 1; margin-bottom: 90px; }
         .quadrant { background: var(--card-bg); border-radius: 20px; display: flex; flex-direction: column; padding: 12px; overflow-y: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid rgba(255,255,255,0.5); }
         .q-title { font-size: 12px; font-weight: 700; margin-bottom: 10px; display: flex; justify-content: space-between; }
         .q1 .q-title { color: var(--red); } .q2 .q-title { color: var(--blue); }
         .q3 .q-title { color: var(--yellow); } .q4 .q-title { color: var(--gray); }
         
-        /* 任务 */
-        .task-item { background: white; border-radius: 12px; padding: 10px; margin-bottom: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        /* 任务单项 */
+        .task-item { background: white; border-radius: 12px; padding: 10px; margin-bottom: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); animation: fadeIn 0.3s ease; }
         .task-content { font-size: 14px; font-weight: 500; display: block; }
         .task-meta { font-size: 10px; color: #AEAEB2; }
 
         /* 工具栏 */
         .footer-tools { position: fixed; bottom: 25px; left: 20px; right: 20px; background: rgba(28,28,30,0.85); backdrop-filter: blur(15px); border-radius: 25px; padding: 12px; display: flex; justify-content: space-around; }
-        .tool-btn { color: white; background: none; border: none; font-size: 12px; }
+        .tool-btn { color: white; background: none; border: none; font-size: 12px; cursor: pointer; }
 
-        /* 弹窗 */
+        /* 弹窗样式 */
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: flex-end; z-index: 100; }
         .modal-content { background: #F2F2F7; padding: 25px; border-radius: 25px 25px 0 0; width: 100%; box-sizing: border-box; }
-        input { width: 100%; margin-bottom: 12px; padding: 15px; border: none; border-radius: 12px; font-size: 16px; outline: none; }
+        input { width: 100%; margin-bottom: 12px; padding: 15px; border: none; border-radius: 12px; font-size: 16px; outline: none; box-sizing: border-box; }
         .save-btn { width: 100%; padding: 16px; background: var(--blue); color: white; border: none; border-radius: 14px; font-weight: 600; font-size: 17px; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <span id="status-dot"></span>云端同步看板
+    <span id="status-dot"></span>公共云端看板
 </div>
 
-<div id="version-tag">Ver. 1.2.0 (Cloud)</div>
+<div id="version-tag">Ver. 1.2.1 (Public)</div>
 
 <div class="grid-container">
     <div class="quadrant q1" onclick="openModal(1)"><div class="q-title">重要·紧急 <span>＋</span></div><div id="list1"></div></div>
@@ -64,7 +65,7 @@
 
 <div class="footer-tools">
     <button class="tool-btn" onclick="fetchTasks()">🔄 同步刷新</button>
-    <button class="tool-btn" onclick="clearAll()" style="color: #FF453A;">🗑️ 清空云端</button>
+    <button class="tool-btn" onclick="clearAll()" style="color: #FF453A;">🗑️ 清空所有</button>
 </div>
 
 <div id="modal">
@@ -81,47 +82,48 @@
 </div>
 
 <script>
-    // 配置 Supabase (已填入你的 URL 和 Key)
+    // 配置 Supabase
     const SUPABASE_URL = 'https://vretyaqosmpgdoenlwfl.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_yJ9Z9NR3x9QreGks1dUfGg_Mq44rWXm'; 
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let allTasks = [];
     let currentQuadrant = 1;
 
-    window.onload = async () => {
+    // 页面加载自动获取
+    window.onload = () => {
         document.getElementById('taskDate').value = new Date().toISOString().split('T')[0];
-        await fetchTasks();
+        fetchTasks();
     };
 
-    // 检查云端连接并刷新数据
+    // 获取数据
     async function fetchTasks() {
         const dot = document.getElementById('status-dot');
-        const { data, error } = await supabaseClient
-            .from('tasks')
+        const { data, error } = await _supabase
+            .from('tasks') // 如果想用新表，这里改为 'todos_v2'
             .select('*')
             .order('created_at', { ascending: false });
         
         if (error) {
-            console.error("同步失败:", error);
-            dot.style.background = '#FF3B30'; // 失败变红
+            dot.style.background = '#FF3B30';
+            console.error(error);
         } else {
-            dot.style.background = '#4CD964'; // 成功变绿
+            dot.style.background = '#4CD964';
             allTasks = data;
             renderTasks();
         }
     }
 
-    // 保存任务到云端
+    // 保存数据
     async function saveTask() {
         const content = document.getElementById('taskContent').value;
-        const btn = document.getElementById('saveBtn');
         if (!content) return;
 
-        btn.innerText = "正在同步...";
+        const btn = document.getElementById('saveBtn');
+        btn.innerText = "同步中...";
         btn.disabled = true;
 
-        const { error } = await supabaseClient.from('tasks').insert([{
+        const { error } = await _supabase.from('tasks').insert([{
             quadrant: currentQuadrant,
             content: content,
             task_date: document.getElementById('taskDate').value,
@@ -129,22 +131,21 @@
         }]);
 
         if (error) {
-            alert("云端保存失败，请检查数据库权限 (RLS): " + error.message);
+            alert("保存失败，请检查 Supabase 表权限 (RLS)");
         } else {
-            await fetchTasks();
+            fetchTasks();
             closeModal();
         }
         btn.innerText = "保存到云端";
         btn.disabled = false;
     }
 
-    // 从云端删除任务
+    // 删除单项
     async function deleteTask(id, e) {
         e.stopPropagation();
-        if(confirm("确定完成该任务并删除吗？")) {
-            const { error } = await supabaseClient.from('tasks').delete().eq('id', id);
-            if (!error) fetchTasks();
-            else alert("删除失败");
+        if(confirm("确定完成并删除吗？")) {
+            await _supabase.from('tasks').delete().eq('id', id);
+            fetchTasks();
         }
     }
 
@@ -162,7 +163,7 @@
 
     function openModal(q) { currentQuadrant = q; document.getElementById('modal').style.display = 'flex'; }
     function closeModal() { document.getElementById('modal').style.display = 'none'; document.getElementById('taskContent').value = ''; }
-    async function clearAll() { if(confirm("确定清空云端吗？")) { await supabaseClient.from('tasks').delete().neq('quadrant', 0); fetchTasks(); } }
+    async function clearAll() { if(confirm("确定清空云端吗？")) { await _supabase.from('tasks').delete().neq('id', '00000000-0000-0000-0000-000000000000'); fetchTasks(); } }
 </script>
 </body>
 </html>
